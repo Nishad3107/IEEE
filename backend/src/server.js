@@ -135,8 +135,11 @@ app.get('/api/projects', requireAuth, async (req, res, next) => {
 app.post('/api/projects', requireAuth, requireRole('STUDENT', 'COORDINATOR'), async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { title, department, studentIds = [] } = req.body;
-    const memberIds = [...new Set([req.user.sub, ...studentIds])];
+    const { title, department, studentIds = [], studentRollNumbers = [] } = req.body;
+    const rollNumberIds = studentRollNumbers.length
+      ? (await client.query('SELECT user_id FROM student_profiles WHERE roll_number = ANY($1::text[])', [studentRollNumbers])).rows.map((row) => row.user_id)
+      : [];
+    const memberIds = [...new Set([req.user.sub, ...studentIds, ...rollNumberIds])];
     if (!title || !department || memberIds.length > 4) return res.status(400).json({ success: false, message: 'Title, department, and up to four students are required' });
     await client.query('BEGIN');
     const project = await client.query('INSERT INTO projects (title, department, created_by, status) VALUES ($1, $2, $3, \'TEAM_FORMING\') RETURNING *', [title, department, req.user.sub]);
