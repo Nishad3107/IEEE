@@ -2,23 +2,17 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import Sidebar, { UserRole } from "./Sidebar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { role: authRole } = useAuth();
   const [role, setRole] = useState<UserRole>(pathname.startsWith("/student") ? "student" : "coordinator");
 
   useEffect(() => {
-    const stored = localStorage.getItem("currentUser");
-    if (stored) {
-      try {
-        const storedRole = JSON.parse(stored).role?.toLowerCase();
-        if (["student", "guide", "coordinator"].includes(storedRole)) setRole(storedRole as UserRole);
-      } catch {
-        // Ignore malformed local session data.
-      }
-    }
-  }, []);
+    if (authRole) setRole(authRole);
+  }, [authRole]);
 
   if (pathname === "/login") return <>{children}</>;
 
