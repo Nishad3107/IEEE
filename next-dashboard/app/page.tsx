@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   Bell,
   BookOpen,
@@ -19,10 +19,12 @@ import {
   Users,
   X,
 } from "lucide-react";
+import api from "./lib/api";
 
 type Status = "Approved" | "Pending" | "Scheduled" | "Submitted" | "Not Submitted";
 
 type Team = {
+  id?: string;
   name: string;
   members: number;
   guide: string;
@@ -31,10 +33,10 @@ type Team = {
 };
 
 const teams: Team[] = [
-  { name: "CodeCrafters", members: 4, guide: "Dr. Priya Mehta", review: "Approved", submission: "Submitted" },
-  { name: "DataMinds", members: 3, guide: "Prof. Rahul Verma", review: "Scheduled", submission: "Not Submitted" },
-  { name: "Pixel Pioneers", members: 4, guide: "Dr. Ananya Rao", review: "Pending", submission: "Not Submitted" },
-  { name: "Cloud Nine", members: 3, guide: "Dr. Vikram Shah", review: "Approved", submission: "Submitted" },
+  { id: "demo-codecrafters", name: "CodeCrafters", members: 4, guide: "Dr. Priya Mehta", review: "Approved", submission: "Submitted" },
+  { id: "demo-dataminds", name: "DataMinds", members: 3, guide: "Prof. Rahul Verma", review: "Scheduled", submission: "Not Submitted" },
+  { id: "demo-pixel-pioneers", name: "Pixel Pioneers", members: 4, guide: "Dr. Ananya Rao", review: "Pending", submission: "Not Submitted" },
+  { id: "demo-cloud-nine", name: "Cloud Nine", members: 3, guide: "Dr. Vikram Shah", review: "Approved", submission: "Submitted" },
 ];
 
 const guideOptions = [
@@ -64,7 +66,7 @@ function StatusBadge({ status }: { status: Status }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${classes[status]}`}>{status}</span>;
 }
 
-function GuidePreferenceForm() {
+function GuidePreferenceForm({ projectId }: { projectId?: string }) {
   const [preferences, setPreferences] = useState(["", "", ""]);
   const [saved, setSaved] = useState(false);
 
@@ -72,6 +74,14 @@ function GuidePreferenceForm() {
     setPreferences((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
     setSaved(false);
   };
+
+  async function savePreferences(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (projectId && !projectId.startsWith("demo-")) {
+      await api.post(`/projects/${projectId}/guide-preferences`, { guideIds: preferences });
+    }
+    setSaved(true);
+  }
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -83,7 +93,7 @@ function GuidePreferenceForm() {
         </div>
       </div>
 
-      <form className="mt-6 space-y-4" onSubmit={(event) => { event.preventDefault(); setSaved(true); }}>
+      <form className="mt-6 space-y-4" onSubmit={savePreferences}>
         {preferences.map((preference, index) => (
           <div key={index}>
             <label htmlFor={`guide-${index}`} className="mb-2 block text-sm font-semibold text-slate-700">Preference {index + 1}</label>
@@ -106,8 +116,19 @@ function GuidePreferenceForm() {
   );
 }
 
-function ReviewScheduling() {
+function ReviewScheduling({ projectId }: { projectId?: string }) {
   const [scheduled, setScheduled] = useState(false);
+  const [team, setTeam] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+
+  async function scheduleReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (projectId && !projectId.startsWith("demo-")) {
+      await api.post("/reviews", { projectId, scheduledStart: `${date}T${time}:00`, scheduledEnd: `${date}T${time}:30` });
+    }
+    setScheduled(true);
+  }
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -116,13 +137,13 @@ function ReviewScheduling() {
         <div><h2 className="text-lg font-bold">Review Scheduling</h2><p className="mt-1 text-sm text-slate-500">Schedule a review for a project team.</p></div>
       </div>
 
-      <form className="mt-6 space-y-4" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setScheduled(true); }}>
+      <form className="mt-6 space-y-4" onSubmit={scheduleReview}>
         <label className="block text-sm font-semibold text-slate-700">Selected team
-          <select required className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"><option value="">Choose a team</option>{teams.map((team) => <option key={team.name}>{team.name}</option>)}</select>
+          <select required value={team} onChange={(event) => setTeam(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"><option value="">Choose a team</option>{teams.map((team) => <option key={team.name} value={team.name}>{team.name}</option>)}</select>
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-semibold text-slate-700">Date<input required type="date" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></label>
-          <label className="block text-sm font-semibold text-slate-700">Time<input required type="time" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></label>
+          <label className="block text-sm font-semibold text-slate-700">Date<input required type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></label>
+          <label className="block text-sm font-semibold text-slate-700">Time<input required type="time" value={time} onChange={(event) => setTime(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></label>
         </div>
         {scheduled && <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700"><CheckCircle2 size={17} /> Review scheduled successfully.</p>}
         <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700"><CalendarDays size={17} /> Schedule review</button>
@@ -131,9 +152,20 @@ function ReviewScheduling() {
   );
 }
 
-function FinalSubmissionRecord() {
+function FinalSubmissionRecord({ projectId }: { projectId?: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  async function submitFinalProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    if (projectId && !projectId.startsWith("demo-")) {
+      const formData = new FormData();
+      formData.append("report", file);
+      await api.post(`/projects/${projectId}/final-submission`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+    }
+    setSubmitted(true);
+  }
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -142,7 +174,7 @@ function FinalSubmissionRecord() {
         <div><h2 className="text-lg font-bold">Final Submission Record</h2><p className="mt-1 text-sm text-slate-500">Upload your final project report as a PDF.</p></div>
       </div>
 
-      <form className="mt-6" onSubmit={(event) => { event.preventDefault(); if (file) setSubmitted(true); }}>
+      <form className="mt-6" onSubmit={submitFinalProject}>
         <label htmlFor="final-report" className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center hover:border-indigo-400 hover:bg-indigo-50/40">
           <UploadCloud size={28} className="text-indigo-600" />
           <p className="mt-3 text-sm font-semibold">{file ? file.name : "Upload final PDF report"}</p>
@@ -159,7 +191,19 @@ function FinalSubmissionRecord() {
 export default function CoordinatorDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const filteredTeams = teams.filter((team) => `${team.name} ${team.guide}`.toLowerCase().includes(search.toLowerCase()));
+  const [teamRows, setTeamRows] = useState(teams);
+  useEffect(() => {
+    api.get("/projects").then(({ data }) => {
+      if (data.projects?.length) {
+        setTeamRows(data.projects.map((project: { id: string; title: string; member_count: number; guide: string; status: string }) => ({
+          id: project.id, name: project.title || "Untitled project", members: project.member_count, guide: project.guide,
+          review: "Pending" as Status, submission: (project.status === "SUBMITTED" ? "Submitted" : "Not Submitted") as Status,
+        })));
+      }
+    }).catch(() => undefined);
+  }, []);
+  const filteredTeams = teamRows.filter((team) => `${team.name} ${team.guide}`.toLowerCase().includes(search.toLowerCase()));
+  const activeProjectId = teamRows[0]?.id;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -174,7 +218,7 @@ export default function CoordinatorDashboard() {
         <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8"><div className="mb-8"><p className="text-sm font-semibold uppercase tracking-widest text-indigo-600">Project overview</p><h2 className="mt-2 text-3xl font-bold tracking-tight">Manage project progress at a glance.</h2><p className="mt-3 max-w-2xl text-sm text-slate-500">Monitor teams, guide preferences, reviews, and final submissions.</p></div>
           <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-sm text-slate-500">{label}</p><Icon size={19} className="text-indigo-600" /></div><p className="mt-4 text-3xl font-bold">{value}</p></div>)}</div>
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-bold">Project Teams</h2><p className="mt-1 text-sm text-slate-500">Track guide allocation, reviews, and submissions.</p></div><div className="relative w-full sm:w-64"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search teams or guides" className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></div></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-6 py-4">Team Name</th><th className="px-6 py-4">Allocated Guide</th><th className="px-6 py-4">Review Status</th><th className="px-6 py-4">Final Submission</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredTeams.map((team) => <tr key={team.name} className="hover:bg-slate-50"><td className="px-6 py-5"><p className="font-semibold">{team.name}</p><p className="text-xs text-slate-500">{team.members} members</p></td><td className="px-6 py-5 text-sm text-slate-600">{team.guide}</td><td className="px-6 py-5"><StatusBadge status={team.review} /></td><td className="px-6 py-5"><StatusBadge status={team.submission} /></td></tr>)}</tbody></table></div></section>
-          <div className="mt-6 grid gap-6 xl:grid-cols-3"><GuidePreferenceForm /><ReviewScheduling /><FinalSubmissionRecord /></div>
+          <div className="mt-6 grid gap-6 xl:grid-cols-3"><GuidePreferenceForm projectId={activeProjectId} /><ReviewScheduling projectId={activeProjectId} /><FinalSubmissionRecord projectId={activeProjectId} /></div>
         </main>
       </div>
     </div>

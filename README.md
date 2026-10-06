@@ -36,3 +36,5 @@ npm run dev
 ```
 
 Open `http://localhost:3000` to view the coordinator dashboard, guide preference form, review scheduling form, and final PDF submission record.
+
+The Next.js dashboard is connected to the Express API through `app/lib/api.ts`. Start PostgreSQL, run `backend/schema.sql`, configure `backend/.env`, then start the backend before using the dashboard. The login page is available at `http://localhost:3000/login`.
