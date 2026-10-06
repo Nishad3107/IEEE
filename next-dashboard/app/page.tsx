@@ -39,12 +39,12 @@ const teams: Team[] = [
   { id: "demo-cloud-nine", name: "Cloud Nine", members: 3, guide: "Dr. Vikram Shah", review: "Approved", submission: "Submitted" },
 ];
 
-const guideOptions = [
-  "Dr. Priya Mehta",
-  "Prof. Rahul Verma",
-  "Dr. Ananya Rao",
-  "Dr. Vikram Shah",
-  "Prof. Neha Kapoor",
+const fallbackGuides = [
+  { id: "", name: "Dr. Priya Mehta" },
+  { id: "", name: "Prof. Rahul Verma" },
+  { id: "", name: "Dr. Ananya Rao" },
+  { id: "", name: "Dr. Vikram Shah" },
+  { id: "", name: "Prof. Neha Kapoor" },
 ];
 
 const stats = [
@@ -69,6 +69,13 @@ function StatusBadge({ status }: { status: Status }) {
 function GuidePreferenceForm({ projectId }: { projectId?: string }) {
   const [preferences, setPreferences] = useState(["", "", ""]);
   const [saved, setSaved] = useState(false);
+  const [guides, setGuides] = useState(fallbackGuides);
+
+  useEffect(() => {
+    api.get("/guides").then(({ data }) => {
+      if (data.guides?.length) setGuides(data.guides.map((guide: { id: string; name: string }) => ({ id: guide.id, name: guide.name })));
+    }).catch(() => undefined);
+  }, []);
 
   const updatePreference = (index: number, value: string) => {
     setPreferences((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
@@ -105,7 +112,7 @@ function GuidePreferenceForm({ projectId }: { projectId?: string }) {
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
             >
               <option value="">Choose a guide</option>
-              {guideOptions.map((guide) => <option key={guide} value={guide} disabled={preferences.includes(guide) && preference !== guide}>{guide}</option>)}
+              {guides.map((guide) => <option key={`${guide.id}-${guide.name}`} value={guide.id || guide.name} disabled={preferences.includes(guide.id || guide.name) && preference !== (guide.id || guide.name)}>{guide.name}</option>)}
             </select>
           </div>
         ))}
@@ -208,13 +215,13 @@ export default function CoordinatorDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {sidebarOpen && <button aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" />}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`hidden ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-6"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><FolderKanban size={21} /></div><div><p className="font-bold">ProjectTrack</p><p className="text-xs text-slate-500">Coordinator portal</p></div></div><button onClick={() => setSidebarOpen(false)} className="lg:hidden"><X size={20} /></button></div>
         <nav className="flex-1 space-y-1 px-4 py-8"><p className="px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Management</p><button className="mt-4 flex w-full items-center gap-3 rounded-xl bg-indigo-50 px-3 py-3 text-sm font-semibold text-indigo-700"><LayoutDashboard size={19} /> Dashboard</button><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-slate-50"><Users size={19} /> Teams</button><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-slate-50"><BookOpen size={19} /> Guides</button><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-slate-50"><ClipboardCheck size={19} /> Reviews</button><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600 hover:bg-slate-50"><FileCheck2 size={19} /> Submissions</button></nav>
         <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 font-semibold text-indigo-700">AK</div><div><p className="text-sm font-semibold">Anita Kapoor</p><p className="text-xs text-slate-500">Coordinator</p></div></div></div>
       </aside>
 
-      <div className="lg:pl-72"><header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8"><div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(true)} className="lg:hidden"><Menu size={22} /></button><div><p className="text-sm text-slate-500">Academic Year 2024–25</p><h1 className="text-xl font-bold">Coordinator Dashboard</h1></div></div><button aria-label="Notifications" className="relative rounded-xl border border-slate-200 p-2.5"><Bell size={20} /><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-600" /></button></header>
+      <div><header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8"><div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(true)} className="lg:hidden"><Menu size={22} /></button><div><p className="text-sm text-slate-500">Academic Year 2024–25</p><h1 className="text-xl font-bold">Coordinator Dashboard</h1></div></div><button aria-label="Notifications" className="relative rounded-xl border border-slate-200 p-2.5"><Bell size={20} /><span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-600" /></button></header>
         <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8"><div className="mb-8"><p className="text-sm font-semibold uppercase tracking-widest text-indigo-600">Project overview</p><h2 className="mt-2 text-3xl font-bold tracking-tight">Manage project progress at a glance.</h2><p className="mt-3 max-w-2xl text-sm text-slate-500">Monitor teams, guide preferences, reviews, and final submissions.</p></div>
           <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-sm text-slate-500">{label}</p><Icon size={19} className="text-indigo-600" /></div><p className="mt-4 text-3xl font-bold">{value}</p></div>)}</div>
           <section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-lg font-bold">Project Teams</h2><p className="mt-1 text-sm text-slate-500">Track guide allocation, reviews, and submissions.</p></div><div className="relative w-full sm:w-64"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search teams or guides" className="w-full rounded-xl border border-slate-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50" /></div></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-6 py-4">Team Name</th><th className="px-6 py-4">Allocated Guide</th><th className="px-6 py-4">Review Status</th><th className="px-6 py-4">Final Submission</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredTeams.map((team) => <tr key={team.name} className="hover:bg-slate-50"><td className="px-6 py-5"><p className="font-semibold">{team.name}</p><p className="text-xs text-slate-500">{team.members} members</p></td><td className="px-6 py-5 text-sm text-slate-600">{team.guide}</td><td className="px-6 py-5"><StatusBadge status={team.review} /></td><td className="px-6 py-5"><StatusBadge status={team.submission} /></td></tr>)}</tbody></table></div></section>

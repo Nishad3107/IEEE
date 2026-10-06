@@ -177,6 +177,134 @@ app.post('/api/projects/:projectId/guide-preferences', requireAuth, requireRole(
   }
 });
 
+app.post('/api/projects/:projectId/allocate-guide', requireAuth, requireRole('COORDINATOR'), async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const preferences = await client.query(
+      `SELECT gp.guide_id, gp.preference_rank, gp.guide_id AS id
+       FROM guide_preferences gp WHERE gp.project_id = $1 ORDER BY gp.preference_rank`,
+      [req.params.projectId]
+    );
+    let selected = null;
+    for (const preference of preferences.rows) {
+      const guide = await client.query(
+        `SELECT g.user_id AS guide_id, g.max_project_load,
+          (SELECT COUNT(*)::int FROM guide_allocations a WHERE a.guide_id = g.user_id AND a.allocation_status = 'ALLOCATED') AS active_load
+         FROM guide_profiles g WHERE g.user_id = $1 AND g.is_available = TRUE FOR UPDATE`,
+        [preference.guide_id]
+      );
+      if (guide.rows[0] && guide.rows[0].active_load < guide.rows[0].max_project_load) {
+        selected = { ...guide.rows[0], preference_rank: preference.preference_rank };
+        break;
+      }
+    }
+    if (!selected) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'No preferred guide has available capacity' });
+    }
+    await client.query(
+      `INSERT INTO guide_allocations (project_id, guide_id, preference_rank, allocation_status, allocated_by, allocated_at)
+       VALUES ($1, $2, $3, 'ALLOCATED', $4, now())`,
+      [req.params.projectId, selected.guide_id, selected.preference_rank, req.user.sub]
+    );
+    await client.query(`UPDATE projects SET status = 'GUIDE_ALLOCATED', updated_at = now() WHERE id = $1`, [req.params.projectId]);
+    await client.query('COMMIT');
+    return res.status(201).json({ success: true, allocation: selected });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/projects/:projectId/invitations', requireAuth, requireRole('STUDENT'), async (req, res, next) => {
+  try {
+    const { studentId } = req.body;
+    if (!studentId) return res.status(400).json({ success: false, message: 'studentId is required' });
+    const { rows } = await pool.query(
+      `INSERT INTO team_invitations (project_id, invited_student_id, invited_by, expires_at)
+       VALUES ($1, $2, $3, now() + interval '7 days') RETURNING *`,
+      [req.params.projectId, studentId, req.user.sub]
+    );
+    return res.status(201).json({ success: true, invitation: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/invitations/:invitationId/respond', requireAuth, requireRole('STUDENT'), async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const accepted = req.body.accepted === true;
+    await client.query('BEGIN');
+    const invitation = await client.query(
+      `SELECT * FROM team_invitations WHERE id = $1 AND invited_student_id = $2 FOR UPDATE`,
+      [req.params.invitationId, req.user.sub]
+    );
+    if (!invitation.rows[0]) return res.status(404).json({ success: false, message: 'Invitation not found' });
+    await client.query(`UPDATE team_invitations SET status = $1, responded_at = now() WHERE id = $2`, [accepted ? 'ACCEPTED' : 'REJECTED', req.params.invitationId]);
+    if (accepted) await client.query(`INSERT INTO project_members (project_id, student_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [invitation.rows[0].project_id, req.user.sub]);
+    await client.query('COMMIT');
+    return res.json({ success: true, accepted });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/projects/:projectId/progress-logs', requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT pl.*, CONCAT(u.first_name, ' ', u.last_name) AS author_name FROM progress_logs pl JOIN users u ON u.id = pl.author_id WHERE pl.project_id = $1 ORDER BY pl.log_date DESC, pl.created_at DESC`, [req.params.projectId]);
+    return res.json({ success: true, progressLogs: rows });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/projects/:projectId/progress-logs', requireAuth, async (req, res, next) => {
+  try {
+    const { title, description, progressPercentage, blockers, nextSteps, logDate } = req.body;
+    if (!title || !description) return res.status(400).json({ success: false, message: 'Title and description are required' });
+    const { rows } = await pool.query(`INSERT INTO progress_logs (project_id, author_id, title, description, progress_percentage, blockers, next_steps, log_date) VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::date, CURRENT_DATE)) RETURNING *`, [req.params.projectId, req.user.sub, title, description, progressPercentage ?? null, blockers || null, nextSteps || null, logDate || null]);
+    return res.status(201).json({ success: true, progressLog: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/reviews/:reviewId/evaluations', requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT e.*, CONCAT(u.first_name, ' ', u.last_name) AS evaluator_name FROM review_evaluations e JOIN users u ON u.id = e.evaluator_id WHERE e.review_id = $1 ORDER BY e.submitted_at DESC`, [req.params.reviewId]);
+    return res.json({ success: true, evaluations: rows });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/reviews/:reviewId/evaluations', requireAuth, requireRole('GUIDE', 'PANEL_MEMBER', 'COORDINATOR'), async (req, res, next) => {
+  try {
+    const { score, rubric, comments } = req.body;
+    if (score === undefined) return res.status(400).json({ success: false, message: 'Score is required' });
+    const { rows } = await pool.query(`INSERT INTO review_evaluations (review_id, evaluator_id, score, rubric, comments, submitted_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (review_id, evaluator_id) DO UPDATE SET score = EXCLUDED.score, rubric = EXCLUDED.rubric, comments = EXCLUDED.comments, submitted_at = now() RETURNING *`, [req.params.reviewId, req.user.sub, score, rubric || {}, comments || null]);
+    return res.status(201).json({ success: true, evaluation: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/projects/:projectId/documents', requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM documents WHERE project_id = $1 AND deleted_at IS NULL ORDER BY uploaded_at DESC`, [req.params.projectId]);
+    return res.json({ success: true, documents: rows });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post('/api/reviews', requireAuth, requireRole('COORDINATOR'), async (req, res, next) => {
   try {
     const { projectId, scheduledStart, scheduledEnd, location, agenda } = req.body;
