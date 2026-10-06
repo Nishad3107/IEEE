@@ -28,7 +28,7 @@ type NavigationItem = {
 const roleNavigation: Record<UserRole, NavigationItem[]> = {
   student: [
     { label: "Dashboard", href: "/student", icon: LayoutDashboard },
-    { label: "Team Formation", href: "/student#team", icon: Users },
+    { label: "Team Formation", href: "/dashboard/student/team-formation", icon: Users },
     { label: "Guide Selection", href: "/student#guides", icon: BookOpen },
     { label: "Final Submission", href: "/student#submission", icon: FileCheck2 },
   ],
